@@ -1,7 +1,7 @@
 [Unit]
 Description=Office Manage Flask API
-After=network.target mysql.service
-Wants=mysql.service
+After=network.target mariadb.service mysqld.service mysql.service
+Wants=mariadb.service mysqld.service
 
 [Service]
 Type=simple

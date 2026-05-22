@@ -9,10 +9,18 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: ${{ secrets.DEPLOY_HOST != '' }}
 
     steps:
+      - name: Check deploy secrets
+        run: |
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ] || [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ]; then
+            echo "Skip: add DEPLOY_HOST and DEPLOY_SSH_KEY in GitHub Secrets first."
+            echo "See 自动部署-只看这个.txt in your project folder."
+            exit 0
+          fi
+
       - name: Deploy on ECS via SSH
+        if: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_SSH_KEY != '' }}
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
