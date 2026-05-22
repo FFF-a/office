@@ -1,5 +1,5 @@
-# 后端：push 到 main/master 后 SSH 部署到服务器（需先在 GitHub 配置 Secrets）
-name: Backend Deploy
+# 后端：GitHub Actions → 阿里云 ECS SSH 自动部署
+name: Backend Deploy to Aliyun ECS
 
 on:
   push:
@@ -9,46 +9,55 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # 未配置 DEPLOY_HOST 时跳过，避免误报错
     if: ${{ secrets.DEPLOY_HOST != '' }}
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload code to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT != '' && secrets.DEPLOY_PORT || '22' }}
-          source: "."
-          target: ${{ secrets.DEPLOY_PATH }}
-          strip_components: 0
-          rm: false
-          exclude: |
-            .git
-            .github
-            logs
-            __pycache__
-            .env
-
-      - name: Install deps and restart
+      - name: Deploy on ECS via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT != '' && secrets.DEPLOY_PORT || '22' }}
+          script_stop: true
           script: |
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
-            python3 -m pip install -r requirements.txt --user -q
-            if systemctl is-active --quiet office-backend 2>/dev/null; then
-              sudo systemctl restart office-backend
-            else
-              echo "Tip: configure systemd service office-backend (see deploy/README.md)"
-              pkill -f "python.*run.py" || true
-              nohup python3 run.py > logs/deploy.log 2>&1 &
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+            REPO_URL="https://github.com/FFF-a/office.git"
+            BRANCH="main"
+
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
+              echo "First deploy: git clone..."
+              mkdir -p "$(dirname "$DEPLOY_PATH")"
+              git clone -b "$BRANCH" "$REPO_URL" "$DEPLOY_PATH"
             fi
-            echo "Deploy done."
+
+            cd "$DEPLOY_PATH"
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            if [ ! -d venv ]; then
+              python3 -m venv venv
+            fi
+            ./venv/bin/pip install -r requirements.txt -q
+
+            if [ ! -f .env ]; then
+              echo "ERROR: missing .env on server. Run deploy/aliyun-ecs-setup.sh first."
+              exit 1
+            fi
+
+            if [ -f deploy/office-backend.service ]; then
+              cp deploy/office-backend.service /etc/systemd/system/office-backend.service
+              systemctl daemon-reload
+              systemctl enable office-backend
+            fi
+
+            systemctl restart office-backend
+            sleep 2
+            curl -sf http://127.0.0.1:5000/health | head -c 200
+            echo ""
+            echo "Deploy OK."
+
+      - name: Health check (public)
+        run: |
+          curl -sf "http://${{ secrets.DEPLOY_HOST }}:5000/health" || (echo "Public health check failed - open port 5000 in Aliyun security group" && exit 1)

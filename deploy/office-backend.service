@@ -1,0 +1,16 @@
+[Unit]
+Description=Office Manage Flask API
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/office_backend
+EnvironmentFile=/opt/office_backend/.env
+ExecStart=/opt/office_backend/venv/bin/python run.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

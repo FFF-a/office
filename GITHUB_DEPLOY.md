@@ -1,33 +1,30 @@
-# 后端 GitHub 自动化说明
+# 后端 GitHub 自动化部署
 
-仓库：https://github.com/FFF-a/office
+## 阿里云 ECS（推荐）
 
-## 已配置的 Workflow
+完整步骤见：**[deploy/ALIYUN_ECS.md](deploy/ALIYUN_ECS.md)**
 
-| 文件 | 触发 | 作用 |
-|------|------|------|
-| `backend-ci.yml` | 每次 push / PR | 安装依赖、检查 Flask 能否启动 |
-| `backend-deploy.yml` | push 到 main + 手动 | SSH 部署到云服务器（需配置 Secrets） |
+简要流程：
 
-## 你需要做的（一次性）
+1. 阿里云买 ECS（Ubuntu）+ 安全组放行 **22、5000**
+2. SSH 登录，运行 `deploy/aliyun-ecs-setup.sh` 初始化
+3. GitHub 仓库 `FFF-a/office` 配置 Secrets：`DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_SSH_KEY`、`DEPLOY_PATH`
+4. `git push` → Actions 自动 `git pull` + 重启服务
 
-### 1. 把本目录代码推到 GitHub
+## Workflows
 
-```powershell
-cd office_backend
-git add .
-git commit -m "ci: add GitHub Actions for backend"
-git push origin main
+| 文件 | 作用 |
+|------|------|
+| `backend-ci.yml` | 每次 push 检查 Flask 能否加载 |
+| `backend-deploy.yml` | push 后部署到 ECS（需 Secrets） |
+
+## API 地址
+
+部署成功后：
+
+```
+http://<ECS公网IP>:5000
 ```
 
-若默认分支是 `master`，把上面 `main` 改成 `master`。
-
-### 2. 若要自动部署到服务器
-
-按 `deploy/README.md` 在 GitHub 添加 `DEPLOY_HOST` 等 Secrets。
-
-未配置 `DEPLOY_HOST` 时，**Deploy 工作流会自动跳过**，不影响 CI。
-
-### 3. 在服务器准备 `.env`
-
-与本地相同，但不要提交到 Git。
+健康检查：`/health`  
+登录：`POST /api/admin/login`
