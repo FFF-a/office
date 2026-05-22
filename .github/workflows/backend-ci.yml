@@ -1,0 +1,33 @@
+# 后端：每次 push / PR 自动检查能否正常加载
+name: Backend CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify Flask app loads
+        env:
+          SECRET_KEY: ci-test-secret
+          JWT_SECRET: ci-test-jwt
+          DB_HOST: 127.0.0.1
+          DB_USER: root
+          DB_PASSWORD: ci
+          DB_NAME: office_manage
+        run: python -c "from app import create_app; app = create_app(); print('OK', app.name)"

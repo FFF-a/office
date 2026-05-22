@@ -1,0 +1,54 @@
+# 后端：push 到 main/master 后 SSH 部署到服务器（需先在 GitHub 配置 Secrets）
+name: Backend Deploy
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # 未配置 DEPLOY_HOST 时跳过，避免误报错
+    if: ${{ secrets.DEPLOY_HOST != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload code to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT != '' && secrets.DEPLOY_PORT || '22' }}
+          source: "."
+          target: ${{ secrets.DEPLOY_PATH }}
+          strip_components: 0
+          rm: false
+          exclude: |
+            .git
+            .github
+            logs
+            __pycache__
+            .env
+
+      - name: Install deps and restart
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT != '' && secrets.DEPLOY_PORT || '22' }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            python3 -m pip install -r requirements.txt --user -q
+            if systemctl is-active --quiet office-backend 2>/dev/null; then
+              sudo systemctl restart office-backend
+            else
+              echo "Tip: configure systemd service office-backend (see deploy/README.md)"
+              pkill -f "python.*run.py" || true
+              nohup python3 run.py > logs/deploy.log 2>&1 &
+            fi
+            echo "Deploy done."
